@@ -1,0 +1,1966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+<title>Aether — An Interactive Solar System</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --bg-deep: #050611;
+    --bg-nebula-1: #0b0e24;
+    --bg-nebula-2: #150a24;
+    --starlight: #eef1ff;
+    --starlight-dim: #9aa2c7;
+    --accent-gold: #e8b976;
+    --accent-cyan: #6fd6d0;
+    --panel-bg: rgba(10, 12, 28, 0.82);
+    --panel-border: rgba(255,255,255,0.09);
+    --line: rgba(255,255,255,0.14);
+  }
+
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{
+    margin:0; padding:0; width:100%; height:100%;
+    background: var(--bg-deep);
+    color: var(--starlight);
+    font-family: 'IBM Plex Sans', sans-serif;
+    overflow: hidden;
+    overscroll-behavior: none;
+    position: fixed;
+  }
+  button, input, select{ font-family: inherit; touch-action: manipulation; }
+  canvas{ display:block; touch-action:none; }
+
+  #app{ position:fixed; inset:0; }
+
+  /* ---------- Loading ---------- */
+  #loader{
+    position:fixed; inset:0; z-index:100;
+    background: radial-gradient(ellipse at 50% 40%, var(--bg-nebula-2), var(--bg-deep) 70%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transition: opacity 0.9s ease;
+  }
+  #loader h1{
+    font-family:'Spectral', serif; font-weight:300; font-style:italic;
+    font-size:clamp(28px,5vw,46px); letter-spacing:0.03em; margin:0 0 18px;
+    color:var(--starlight);
+  }
+  #loader .ring{
+    width:46px; height:46px; border-radius:50%;
+    border:1.5px solid rgba(255,255,255,0.15);
+    border-top-color: var(--accent-gold);
+    animation: spin 1.1s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  #loader.hide{ opacity:0; pointer-events:none; }
+
+  /* ---------- Top bar ---------- */
+  #topbar{
+    position:fixed; top:0; left:0; right:0; z-index:20;
+    display:flex; align-items:flex-start; justify-content:space-between;
+    flex-wrap:wrap; row-gap:12px;
+    padding: calc(22px + env(safe-area-inset-top)) calc(28px + env(safe-area-inset-right)) 6px calc(28px + env(safe-area-inset-left));
+    pointer-events:none;
+    opacity:0; transform: translateY(-8px);
+    transition: opacity 0.7s ease 0.15s, transform 0.7s ease 0.15s;
+  }
+  #topbar.show{ opacity:1; transform:translateY(0); }
+  #topbar .brand{
+    font-family:'Spectral', serif; font-style:italic; font-weight:300;
+    font-size:22px; letter-spacing:0.02em; color:var(--starlight);
+    min-width:0;
+  }
+  #topbar .brand b{ font-style:normal; font-weight:600; color:var(--accent-gold); }
+  #topbar .sub{
+    font-size:11px; color:var(--starlight-dim); font-family:'IBM Plex Mono', monospace;
+    letter-spacing:0.04em; margin-top:4px; white-space:nowrap;
+  }
+  #hint{
+    font-size:11.5px; color: var(--starlight-dim); text-align:right;
+    font-family:'IBM Plex Mono', monospace; line-height:1.6;
+  }
+
+  /* ---------- Bottom nav ---------- */
+  #nav{
+    position:fixed; left:0; right:0; bottom:0; z-index:20;
+    display:flex; justify-content:center;
+    padding: 16px 12px calc(20px + env(safe-area-inset-bottom));
+    opacity:0; transform: translateY(8px);
+    transition: opacity 0.7s ease 0.2s, transform 0.7s ease 0.2s;
+    pointer-events:none;
+  }
+  #nav.show{ opacity:1; transform:translateY(0); pointer-events:auto; }
+  #nav .rail{
+    display:flex; gap:4px; padding:8px; border-radius:14px;
+    background: var(--panel-bg);
+    border:1px solid var(--panel-border);
+    backdrop-filter: blur(10px);
+    overflow-x:auto; -webkit-overflow-scrolling:touch; max-width:96vw;
+  }
+  .nav-btn{
+    appearance:none; border:none; background:transparent; cursor:pointer;
+    color: var(--starlight-dim); font-family:'IBM Plex Sans', sans-serif;
+    font-size:12.5px; font-weight:500; padding:9px 14px; border-radius:9px;
+    white-space:nowrap; transition: background 0.25s ease, color 0.25s ease;
+  }
+  .nav-btn:hover{ color: var(--starlight); background: rgba(255,255,255,0.06); }
+  .nav-btn.active{ color: var(--bg-deep); background: var(--accent-gold); }
+
+  /* ---------- Info panel ---------- */
+  #panel{
+    position:fixed; top:0; right:0; height:100%; width:min(380px, 92vw);
+    background: var(--panel-bg); backdrop-filter: blur(14px);
+    border-left:1px solid var(--panel-border);
+    z-index:30; transform: translateX(100%);
+    transition: transform 0.5s cubic-bezier(.16,.84,.44,1);
+    padding: 90px 30px 30px;
+    overflow-y:auto;
+  }
+  #panel.open{ transform: translateX(0); }
+  #panel .close{
+    position:absolute; top:26px; right:26px; width:32px; height:32px;
+    border-radius:50%; border:1px solid var(--panel-border); background:transparent;
+    color:var(--starlight-dim); cursor:pointer; font-size:16px; line-height:1;
+  }
+  #panel .close:hover{ color:var(--starlight); border-color:var(--starlight-dim); }
+  #panel .kind{
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:0.08em;
+    color: var(--accent-cyan); margin-bottom:8px; text-transform:uppercase;
+  }
+  #panel h2{
+    font-family:'Spectral', serif; font-weight:400; font-size:34px; margin:0 0 6px;
+    color:var(--starlight);
+  }
+  #panel .tagline{
+    font-size:13.5px; color:var(--starlight-dim); font-style:italic;
+    font-family:'Spectral', serif; margin-bottom:26px; line-height:1.5;
+  }
+  #panel .swatch{
+    width:100%; height:3px; border-radius:2px; margin-bottom:24px;
+  }
+  .stat-row{
+    display:flex; justify-content:space-between; align-items:baseline;
+    padding: 11px 0; border-bottom: 1px solid var(--line);
+  }
+  .stat-row .label{ font-size:12.5px; color:var(--starlight-dim); }
+  .stat-row .value{
+    font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--starlight);
+    text-align:right;
+  }
+  #panel .fact{
+    margin-top:24px; padding:16px 18px; border-radius:10px;
+    background: rgba(255,255,255,0.04); border:1px solid var(--panel-border);
+    font-size:13px; line-height:1.65; color: var(--starlight);
+  }
+  #panel .fact .label{
+    display:block; font-family:'IBM Plex Mono', monospace; font-size:10px;
+    letter-spacing:0.08em; text-transform:uppercase; color:var(--accent-gold);
+    margin-bottom:8px;
+  }
+
+  #crosshair-name{
+    position:fixed; z-index:15; pointer-events:none;
+    font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--starlight-dim);
+    background: rgba(5,6,17,0.6); padding:4px 8px; border-radius:5px;
+    border:1px solid var(--panel-border); opacity:0; transition:opacity 0.15s ease;
+    transform: translate(14px, -50%);
+  }
+
+  ::-webkit-scrollbar{ width:6px; }
+  ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.15); border-radius:3px; }
+
+  @media (max-width: 640px){
+    #topbar{ padding:calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) 6px calc(14px + env(safe-area-inset-left)); }
+    #topbar .brand{ font-size:17px; }
+    #hint{ display:none; }
+    #panel{ width:100vw; padding-top:76px; padding-left:22px; padding-right:22px; }
+    #panel h2{ font-size:28px; }
+  }
+
+  /* ---------- Landing / hero ---------- */
+  #landing{
+    position:fixed; inset:0; z-index:60;
+    background:
+      radial-gradient(ellipse 60% 50% at 50% 38%, rgba(5,6,17,0.30), rgba(5,6,17,0.80) 68%),
+      linear-gradient(180deg, rgba(5,6,17,0.5) 0%, rgba(5,6,17,0.86) 78%, var(--bg-deep) 100%);
+    display:flex; align-items:flex-end; justify-content:center;
+    padding: 40px 24px 8vh;
+    transition: opacity 1s ease, visibility 1s;
+    pointer-events:none;
+    perspective: 1200px;
+    overflow:hidden;
+  }
+  #landing.hide{ opacity:0; visibility:hidden; pointer-events:none; }
+  #landingFX{
+    position:absolute; inset:0; width:100%; height:100%;
+    mix-blend-mode: screen; opacity:0.85;
+  }
+  .orb{
+    position:absolute; border-radius:50%; pointer-events:none; filter: blur(0.5px);
+    opacity:0; animation: orbFadeIn 1.6s ease forwards;
+  }
+  .orb-a{
+    width:64px; height:64px; top:16%; left:12%;
+    background: radial-gradient(circle at 32% 28%, #ffe6b0, #d98a3d 55%, #6b3f16 100%);
+    box-shadow: 0 0 30px rgba(233,170,90,0.35);
+    animation: orbFadeIn 1.6s ease forwards, orbFloatA 13s ease-in-out 1.6s infinite;
+  }
+  .orb-b{
+    width:38px; height:38px; top:66%; left:8%;
+    background: radial-gradient(circle at 32% 28%, #cbe9ff, #4c86c9 55%, #1c3a63 100%);
+    box-shadow: 0 0 22px rgba(80,150,220,0.3);
+    animation: orbFadeIn 1.6s ease 0.3s forwards, orbFloatB 17s ease-in-out 1.9s infinite;
+  }
+  .orb-c{
+    width:26px; height:26px; top:22%; right:10%;
+    background: radial-gradient(circle at 32% 28%, #ffd7d7, #c15b5b 55%, #5c2222 100%);
+    box-shadow: 0 0 16px rgba(200,90,90,0.3);
+    animation: orbFadeIn 1.6s ease 0.5s forwards, orbFloatC 11s ease-in-out 2.1s infinite;
+  }
+  @keyframes orbFadeIn{ to{ opacity:0.85; } }
+  @keyframes orbFloatA{ 0%,100%{ transform:translate(0,0); } 50%{ transform:translate(14px,-22px); } }
+  @keyframes orbFloatB{ 0%,100%{ transform:translate(0,0); } 50%{ transform:translate(-10px,18px); } }
+  @keyframes orbFloatC{ 0%,100%{ transform:translate(0,0); } 50%{ transform:translate(-16px,14px); } }
+  @media (max-width:900px){ .orb{ display:none; } }
+
+  #landing .wrap{
+    max-width:760px; width:100%; text-align:center; pointer-events:auto;
+    position:relative; transform-style: preserve-3d; will-change: transform;
+  }
+  #landing .wrap > *{
+    opacity:0; transform: translateY(16px);
+    animation: landingIn 0.9s cubic-bezier(.16,.84,.44,1) forwards;
+  }
+  #landing .eyebrow{ animation-delay: 0.15s; }
+  #landing h1{ animation-delay: 0.3s; }
+  #landing p.lede{ animation-delay: 0.45s; }
+  #landing .facts{ animation-delay: 0.6s; }
+  #landing .cta-row{ animation-delay: 0.75s; }
+  #landing .foot-note{ animation-delay: 0.9s; }
+  @keyframes landingIn{ to{ opacity:1; transform:translateY(0); } }
+
+  #landing .eyebrow{
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; letter-spacing:0.14em;
+    color: var(--accent-cyan); margin-bottom:22px;
+    text-shadow: 0 0 20px rgba(111,214,208,0.4);
+  }
+  #landing h1{
+    font-family:'Spectral', serif; font-weight:300; font-size:clamp(38px,7vw,76px);
+    line-height:1.06; margin:0 0 22px; color:var(--starlight);
+    text-shadow: 0 4px 40px rgba(0,0,0,0.6);
+  }
+  #landing h1 em{ font-style:italic; color:var(--accent-gold); font-weight:400; }
+  #landing p.lede{
+    font-size:15.5px; line-height:1.7; color:var(--starlight-dim); max-width:520px;
+    margin:0 auto 36px; text-shadow: 0 2px 16px rgba(0,0,0,0.7);
+  }
+  #landing .facts{
+    display:flex; justify-content:center; gap:0; flex-wrap:wrap;
+    margin-bottom:40px; border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    padding: 18px 0; backdrop-filter: blur(2px);
+  }
+  #landing .facts .fitem{
+    padding: 0 26px; text-align:left; border-left:1px solid var(--line);
+  }
+  #landing .facts .fitem:first-child{ border-left:none; }
+  #landing .facts .fnum{
+    font-family:'Spectral', serif; font-size:24px; color:var(--starlight);
+  }
+  #landing .facts .flabel{
+    font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:0.06em;
+    color:var(--starlight-dim); margin-top:4px; text-transform:uppercase;
+  }
+  #landing .cta-row{ display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap; animation-delay:0.78s; }
+  #exploreBtn{
+    position:relative;
+    appearance:none; cursor:pointer; border:1px solid var(--accent-gold);
+    background: rgba(232,185,118,0.06); color:var(--accent-gold);
+    font-family:'IBM Plex Sans', sans-serif; font-size:14px; font-weight:500;
+    padding: 15px 38px; border-radius:999px; letter-spacing:0.02em;
+    box-shadow: 0 0 0 0 rgba(232,185,118,0.35);
+    animation: pulseGlow 2.6s ease-in-out 2.2s infinite;
+    transition: background 0.3s ease, color 0.3s ease, transform 0.3s ease;
+  }
+  #exploreBtn:hover{ background: var(--accent-gold); color:var(--bg-deep); transform: translateY(-2px); }
+  @keyframes pulseGlow{
+    0%,100%{ box-shadow: 0 0 0 0 rgba(232,185,118,0.28); }
+    50%{ box-shadow: 0 0 0 10px rgba(232,185,118,0); }
+  }
+  #landing .foot-note{
+    margin-top:22px; font-size:12px; color:var(--starlight-dim); font-style:italic;
+    font-family:'Spectral', serif;
+  }
+
+  /* ---------- Live data ticker ---------- */
+  #landing .ticker{
+    overflow:hidden; white-space:nowrap;
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    padding: 9px 0; margin: 26px 0; -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    animation-delay: 0.66s;
+  }
+  #tickerTrack{
+    display:inline-block; white-space:nowrap;
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:0.08em;
+    color: var(--starlight-dim);
+    animation: tickerScroll 32s linear infinite;
+  }
+  #tickerTrack b{ color: var(--accent-gold); font-weight:500; }
+  @keyframes tickerScroll{ from{ transform:translateX(0); } to{ transform:translateX(-50%); } }
+
+  @media (max-width:640px){
+    #landing{ align-items:center; padding: 20px 18px calc(20px + env(safe-area-inset-bottom)); }
+    #landing .facts .fitem{ padding:0 12px; }
+    #landing .facts{ gap:10px 0; margin-bottom:28px; }
+    #landing .facts .fnum{ font-size:20px; }
+    #landing p.lede{ font-size:14px; }
+    #landing .ticker{ margin:18px 0; }
+  }
+  @media (max-width:360px){
+    #landing .facts .fitem:nth-child(3),
+    #landing .facts .fitem:nth-child(4){ border-left:none; margin-top:10px; }
+  }
+
+  /* ---------- Toolbar: search + compare ---------- */
+  #topbar .tools{
+    display:flex; align-items:center; gap:10px; pointer-events:auto;
+  }
+  #searchBox{ position:relative; }
+  #searchInput{
+    background: var(--panel-bg); border:1px solid var(--panel-border);
+    color: var(--starlight); font-family:'IBM Plex Sans', sans-serif; font-size:13px;
+    padding: 9px 14px; border-radius:999px; width:170px; outline:none;
+    backdrop-filter: blur(10px);
+    transition: width 0.3s ease, border-color 0.3s ease;
+  }
+  #searchInput::placeholder{ color: var(--starlight-dim); }
+  #searchInput:focus{ width:220px; border-color: var(--accent-gold); }
+  #searchResults{
+    position:absolute; top:calc(100% + 8px); left:0; right:0; z-index:25;
+    background: var(--panel-bg); border:1px solid var(--panel-border); border-radius:12px;
+    backdrop-filter: blur(12px); overflow:hidden; display:none;
+  }
+  #searchResults.show{ display:block; }
+  #searchResults .result{
+    padding: 10px 14px; font-size:13px; color: var(--starlight-dim); cursor:pointer;
+    display:flex; align-items:center; gap:10px;
+  }
+  #searchResults .result .dot{ width:8px; height:8px; border-radius:50%; flex:none; }
+  #searchResults .result:hover, #searchResults .result.active{ background: rgba(255,255,255,0.07); color: var(--starlight); }
+  #searchResults .empty{ padding:10px 14px; font-size:12.5px; color: var(--starlight-dim); font-style:italic; }
+
+  .tool-btn{
+    appearance:none; cursor:pointer; border:1px solid var(--panel-border);
+    background: var(--panel-bg); color: var(--starlight-dim);
+    font-family:'IBM Plex Sans', sans-serif; font-size:12.5px; font-weight:500;
+    padding: 9px 16px; border-radius:999px; white-space:nowrap;
+    backdrop-filter: blur(10px);
+    transition: color 0.25s ease, border-color 0.25s ease;
+  }
+  .tool-btn:hover{ color: var(--starlight); border-color: var(--accent-cyan); }
+
+  @media (max-width:640px){
+    #searchInput{ width:110px; }
+    #searchInput:focus{ width:150px; }
+    .tool-btn{ padding:9px 12px; font-size:11.5px; }
+    #topbar .tools{ flex-wrap:wrap; justify-content:flex-end; width:100%; }
+  }
+  @media (max-width:360px){
+    #searchInput{ width:92px; }
+    #searchResults{ left:auto; right:0; width:200px; }
+  }
+
+  /* ---------- Compare modal ---------- */
+  #compareModal{
+    position:fixed; inset:0; z-index:70; padding:20px;
+    background: rgba(3,4,12,0.75); backdrop-filter: blur(6px);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; visibility:hidden; transition: opacity 0.35s ease, visibility 0.35s ease;
+  }
+  #compareModal.open{ opacity:1; visibility:visible; }
+  .cm-card{
+    position:relative; width:min(660px,95vw); max-height:86vh; overflow-y:auto;
+    background: var(--panel-bg); border:1px solid var(--panel-border); border-radius:18px;
+    padding: 34px 30px; backdrop-filter: blur(16px);
+  }
+  .cm-card .close{
+    position:absolute; top:22px; right:22px; width:32px; height:32px; border-radius:50%;
+    border:1px solid var(--panel-border); background:transparent; color:var(--starlight-dim);
+    cursor:pointer; font-size:16px; line-height:1;
+  }
+  .cm-card .close:hover{ color:var(--starlight); border-color:var(--starlight-dim); }
+  .cm-header .kind{
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:0.08em;
+    color: var(--accent-cyan); text-transform:uppercase; margin-bottom:8px;
+  }
+  .cm-header h2{ font-family:'Spectral', serif; font-weight:400; font-size:28px; margin:0 0 6px; }
+  .cm-header p{ font-size:13px; color: var(--starlight-dim); margin:0 0 24px; line-height:1.5; }
+  .cm-selects{ display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+  .cm-selects select{
+    flex:1; background: rgba(255,255,255,0.04); border:1px solid var(--panel-border);
+    color: var(--starlight); font-family:'IBM Plex Sans', sans-serif; font-size:13.5px;
+    padding: 10px 12px; border-radius:9px; outline:none;
+  }
+  .cm-selects .vs{ font-family:'IBM Plex Mono', monospace; font-size:11px; color: var(--accent-gold); flex:none; }
+  #compareTable{ margin-top:22px; }
+  #compareTable .cname-row{ display:grid; grid-template-columns:1fr 74px 1fr; margin-bottom:14px; }
+  #compareTable .cname{ font-family:'Spectral', serif; font-size:19px; text-align:center; }
+  #compareTable .cname.left{ text-align:right; color: var(--accent-gold); }
+  #compareTable .cname.right{ text-align:left; color: var(--accent-cyan); }
+  #compareTable .crow{
+    display:grid; grid-template-columns:1fr 74px 1fr; gap:6px; align-items:center;
+    padding: 11px 0; border-bottom:1px solid var(--line);
+  }
+  #compareTable .cval{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color: var(--starlight); }
+  #compareTable .cval.left{ text-align:right; }
+  #compareTable .cval.right{ text-align:left; }
+  #compareTable .clabel{
+    text-align:center; font-size:9.5px; letter-spacing:0.05em; text-transform:uppercase;
+    color: var(--starlight-dim); font-family:'IBM Plex Mono', monospace; line-height:1.35;
+  }
+  @media (max-width:640px){
+    #compareTable .cname-row, #compareTable .crow{ grid-template-columns:1fr 60px 1fr; }
+    #compareTable .cval{ font-size:11px; }
+    #compareTable .clabel{ font-size:8.5px; }
+  }
+
+  /* ---------- Control dock (radar, speed, sound, tour) ---------- */
+  #controlDock{
+    position:fixed; left:20px; bottom: calc(96px + env(safe-area-inset-bottom)); z-index:20;
+    display:flex; flex-direction:column; gap:10px;
+    opacity:0; transform: translateY(8px); pointer-events:none;
+    transition: opacity 0.7s ease 0.25s, transform 0.7s ease 0.25s;
+    max-width: 42vw;
+  }
+  #controlDock.show{ opacity:1; transform:translateY(0); pointer-events:auto; }
+  .dock-card{
+    background: var(--panel-bg); border:1px solid var(--panel-border); border-radius:14px;
+    backdrop-filter: blur(12px); padding:12px;
+  }
+  #radarCanvas{ display:block; border-radius:8px; background: rgba(255,255,255,0.02); }
+  .dock-row{ display:flex; align-items:center; gap:10px; margin-top:10px; }
+  .dock-row:first-child{ margin-top:0; }
+  .dock-label{
+    font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:0.05em;
+    color: var(--starlight-dim); text-transform:uppercase; flex:none; width:44px;
+  }
+  #speedSlider{
+    flex:1; -webkit-appearance:none; appearance:none; height:3px; border-radius:2px;
+    background: rgba(255,255,255,0.15); outline:none;
+  }
+  #speedSlider::-webkit-slider-thumb{
+    -webkit-appearance:none; width:13px; height:13px; border-radius:50%;
+    background: var(--accent-gold); cursor:pointer;
+  }
+  #speedSlider::-moz-range-thumb{
+    width:13px; height:13px; border-radius:50%; background: var(--accent-gold); border:none; cursor:pointer;
+  }
+  #speedVal{
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; color: var(--starlight); width:30px; text-align:right; flex:none;
+  }
+  .icon-btn{
+    appearance:none; cursor:pointer; border:1px solid var(--panel-border); background: rgba(255,255,255,0.03);
+    color: var(--starlight-dim); width:34px; height:34px; border-radius:9px; flex:none;
+    display:flex; align-items:center; justify-content:center; font-size:14px;
+    transition: all 0.25s ease;
+  }
+  .icon-btn:hover{ color:var(--starlight); border-color:var(--accent-cyan); }
+  .icon-btn.active{ color: var(--bg-deep); background: var(--accent-gold); border-color: var(--accent-gold); }
+  #tourBtn{
+    flex:1; appearance:none; cursor:pointer; border:1px solid var(--panel-border);
+    background: rgba(255,255,255,0.03); color: var(--starlight);
+    font-family:'IBM Plex Sans', sans-serif; font-size:12px; font-weight:500;
+    padding:8px 10px; border-radius:9px; transition: all 0.25s ease;
+  }
+  #tourBtn:hover{ border-color: var(--accent-gold); }
+  #tourBtn.active{ background: var(--accent-gold); color: var(--bg-deep); border-color: var(--accent-gold); }
+
+  /* ---------- Tour banner ---------- */
+  #tourBanner{
+    position:fixed; top:0; left:0; right:0; z-index:25;
+    display:flex; align-items:center; justify-content:center; gap:14px;
+    padding:12px; background: linear-gradient(180deg, rgba(5,6,17,0.9), rgba(5,6,17,0));
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; color: var(--starlight-dim);
+    opacity:0; visibility:hidden; transition: opacity 0.4s ease, visibility 0.4s ease;
+    pointer-events:none;
+  }
+  #tourBanner.show{ opacity:1; visibility:visible; pointer-events:auto; }
+  #tourBanner b{ color: var(--accent-gold); font-family:'IBM Plex Sans',sans-serif; }
+  #tourBanner button{
+    appearance:none; cursor:pointer; border:1px solid var(--panel-border); background: rgba(255,255,255,0.06);
+    color: var(--starlight); font-family:'IBM Plex Sans',sans-serif; font-size:11px;
+    padding:5px 12px; border-radius:999px;
+  }
+
+  /* ---------- Fact toast ---------- */
+  #factToast{
+    position:fixed; right:20px; bottom: calc(96px + env(safe-area-inset-bottom)); z-index:22; width:min(280px,80vw);
+    background: var(--panel-bg); border:1px solid var(--panel-border); border-radius:14px;
+    backdrop-filter: blur(12px); padding:16px 18px;
+    opacity:0; transform: translateY(10px) scale(0.98); pointer-events:none;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  #factToast.show{ opacity:1; transform: translateY(0) scale(1); }
+  #factToast .flabel{
+    font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:0.08em;
+    color: var(--accent-cyan); text-transform:uppercase; margin-bottom:6px;
+  }
+  #factToast .ftext{ font-size:12.5px; line-height:1.55; color: var(--starlight); }
+
+  /* ---------- Info / about button + modal ---------- */
+  #infoBtn{ font-family:'Spectral', serif; font-style:italic; }
+  #aboutModal.open{ opacity:1; visibility:visible; }
+  #aboutModal .cm-header p{ margin-bottom:14px; }
+  #aboutModal .credit-row{
+    display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--line);
+    font-size:12.5px;
+  }
+  #aboutModal .credit-row span:first-child{ color: var(--starlight-dim); }
+
+  @media (max-width:640px){
+    #controlDock{ left:10px; bottom: calc(84px + env(safe-area-inset-bottom)); max-width:auto; gap:8px; }
+    #controlDock .dock-card:first-child{ display:none; } /* hide radar map on small phones to save space */
+    .dock-card{ padding:9px; }
+    .dock-row{ gap:7px; margin-top:8px; }
+    .icon-btn{ width:32px; height:32px; font-size:13px; }
+    #tourBtn{ font-size:11px; padding:7px 8px; }
+    #speedVal{ width:26px; font-size:9.5px; }
+    #factToast{ right:10px; bottom: calc(84px + env(safe-area-inset-bottom)); width:min(220px,62vw); padding:13px 15px; }
+    #factToast .ftext{ font-size:11.5px; }
+    #tourBanner{ font-size:10.5px; padding:10px 8px; gap:8px; }
+    #tourBanner span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  }
+  @media (max-width:420px){
+    #controlDock{ max-width:150px; }
+    .dock-card .dock-row:last-child{ flex-wrap:wrap; }
+    #tourBtn{ flex:1 1 100%; margin-top:6px; }
+  }
+  @media (max-height:480px) and (orientation:landscape){
+    #controlDock{ bottom:10px; }
+    #factToast{ bottom:10px; }
+    #tourBanner{ padding:6px 8px; font-size:10px; }
+    #landing{ align-items:center; padding:16px; }
+    #landing .facts{ margin-bottom:18px; padding:10px 0; }
+    #landing h1{ font-size:clamp(26px,5vw,40px); margin-bottom:12px; }
+    #landing p.lede{ margin-bottom:18px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<div id="loader">
+  <h1>Charting the <b>solar system</b>…</h1>
+  <div class="ring"></div>
+</div>
+
+<div id="landing">
+  <canvas id="landingFX"></canvas>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+  <div class="orb orb-c"></div>
+  <div class="wrap">
+    <div class="eyebrow">AN INTERACTIVE TOUR OF OUR COSMIC NEIGHBORHOOD</div>
+    <h1 id="heroHeading">
+      <span class="scramble" data-final="Eight worlds.">Eight worlds.</span><br/>
+      <span class="scramble" data-final="One ">One </span><em class="scramble" data-final="Sun">Sun</em><span class="scramble" data-final=". Yours to explore.">. Yours to explore.</span>
+    </h1>
+    <p class="lede">Fly through a living 3D model of the solar system. Drag to orbit any planet, zoom in close, and tap a world to read what makes it strange, hostile, or oddly familiar.</p>
+    <div class="facts">
+      <div class="fitem"><div class="fnum">8</div><div class="flabel">Planets</div></div>
+      <div class="fitem"><div class="fnum">1</div><div class="flabel">Star</div></div>
+      <div class="fitem"><div class="fnum">4.6B</div><div class="flabel">Years old</div></div>
+      <div class="fitem"><div class="fnum">100%</div><div class="flabel">Explorable</div></div>
+    </div>
+    <div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
+    <div class="cta-row">
+      <button id="exploreBtn">Explore the solar system</button>
+    </div>
+    <div class="foot-note">The scene behind you is already live — drag to peek before you dive in.</div>
+  </div>
+</div>
+
+<div id="topbar">
+  <div>
+    <div class="brand">Aether <b>· Sol System</b></div>
+    <div class="sub">DRAG TO ORBIT · SCROLL TO ZOOM · CLICK A BODY</div>
+  </div>
+  <div class="tools">
+    <div id="searchBox">
+      <input id="searchInput" type="text" placeholder="Search a planet…" autocomplete="off" />
+      <div id="searchResults"></div>
+    </div>
+    <button class="tool-btn" id="compareOpenBtn">Compare</button>
+    <button class="icon-btn" id="infoBtn">i</button>
+  </div>
+</div>
+
+<div id="tourBanner">
+  <span>🛰 Guided tour in progress — visiting <b id="tourPlanetName">Mercury</b></span>
+  <button id="tourStopBtn">End tour</button>
+</div>
+
+<div id="crosshair-name"></div>
+
+<div id="nav">
+  <div class="rail" id="rail"></div>
+</div>
+
+<div id="controlDock">
+  <div class="dock-card">
+    <canvas id="radarCanvas" width="120" height="120"></canvas>
+  </div>
+  <div class="dock-card">
+    <div class="dock-row">
+      <span class="dock-label">Speed</span>
+      <input id="speedSlider" type="range" min="0" max="4" step="0.1" value="1" />
+      <span id="speedVal">1.0×</span>
+    </div>
+    <div class="dock-row">
+      <button class="icon-btn" id="soundToggle" title="Toggle ambient sound">♪</button>
+      <button id="tourBtn">Take a guided tour</button>
+    </div>
+  </div>
+</div>
+
+<div id="factToast">
+  <div class="flabel">Did you know?</div>
+  <div class="ftext" id="factText"></div>
+</div>
+
+<div id="panel">
+  <button class="close" id="panelClose">&times;</button>
+  <div class="kind" id="pKind">Planet</div>
+  <h2 id="pName">Earth</h2>
+  <div class="tagline" id="pTagline">The pale blue dot.</div>
+  <div class="swatch" id="pSwatch"></div>
+  <div id="pStats"></div>
+  <div class="fact"><span class="label">Field notes</span><span id="pFact"></span></div>
+</div>
+
+<div id="compareModal">
+  <div class="cm-card">
+    <button class="close" id="compareClose">&times;</button>
+    <div class="cm-header">
+      <div class="kind">Side by side</div>
+      <h2>Compare two worlds</h2>
+      <p>Pick any two planets to line their vital stats up against each other.</p>
+    </div>
+    <div class="cm-selects">
+      <select id="compareA"></select>
+      <span class="vs">VS</span>
+      <select id="compareB"></select>
+    </div>
+    <div id="compareTable"></div>
+  </div>
+</div>
+
+<div id="aboutModal" class="modal-overlay" style="position:fixed;inset:0;z-index:70;padding:20px;background:rgba(3,4,12,0.75);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:opacity .35s ease, visibility .35s ease;">
+  <div class="cm-card">
+    <button class="close" id="aboutClose">&times;</button>
+    <div class="cm-header">
+      <div class="kind">About this build</div>
+      <h2>Aether · Sol System</h2>
+      <p>A frontend-only, single-file 3D tour of the solar system — every planet texture, ring, and glow is generated procedurally in the browser, so there's nothing to download but this page.</p>
+    </div>
+    <div class="credit-row"><span>Built with</span><span>Three.js (WebGL)</span></div>
+    <div class="credit-row"><span>Textures</span><span>Procedurally generated, canvas-based</span></div>
+    <div class="credit-row"><span>Reference &amp; inspiration</span><span>threejs.org examples</span></div>
+    <div class="credit-row"><span>Built by</span><span>Solo developer</span></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* =========================================================
+   PROCEDURAL TEXTURE GENERATION
+   (guarantees realistic-looking, self-contained textures
+   with no external image dependencies / CORS issues)
+========================================================= */
+
+function seededRandom(seed){
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return function(){
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+function makeCanvas(w, h){
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return c;
+}
+
+function lerpColor(a, b, t){
+  return [
+    Math.round(a[0] + (b[0]-a[0])*t),
+    Math.round(a[1] + (b[1]-a[1])*t),
+    Math.round(a[2] + (b[2]-a[2])*t)
+  ];
+}
+const rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
+
+// simple value-noise for organic blotches
+function valueNoise(w, h, cell, rand){
+  const gw = Math.ceil(w/cell)+2, gh = Math.ceil(h/cell)+2;
+  const grid = [];
+  for(let i=0;i<gw*gh;i++) grid.push(rand());
+  return function(x,y){
+    const gx = x/cell, gy = y/cell;
+    const x0 = Math.floor(gx), y0 = Math.floor(gy);
+    const tx = gx-x0, ty = gy-y0;
+    const v00 = grid[y0*gw+x0], v10 = grid[y0*gw+x0+1];
+    const v01 = grid[(y0+1)*gw+x0], v11 = grid[(y0+1)*gw+x0+1];
+    const sx = tx*tx*(3-2*tx), sy = ty*ty*(3-2*ty);
+    const a = v00 + (v10-v00)*sx;
+    const b = v01 + (v11-v01)*sx;
+    return a + (b-a)*sy;
+  };
+}
+
+// Rocky cratered body (Mercury, Moon)
+function craterTexture(seed, base, dark, light, craterCount=140){
+  const rand = seededRandom(seed);
+  const w=1024,h=512;
+  const c = makeCanvas(w,h); const ctx = c.getContext('2d');
+  const n1 = valueNoise(w,h,60,rand), n2 = valueNoise(w,h,18,rand);
+  const img = ctx.createImageData(w,h);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let t = n1(x,y)*0.6 + n2(x,y)*0.4;
+      let col = lerpColor(dark, light, t);
+      col = lerpColor(base, col, 0.55);
+      const i=(y*w+x)*4;
+      img.data[i]=col[0]; img.data[i+1]=col[1]; img.data[i+2]=col[2]; img.data[i+3]=255;
+    }
+  }
+  ctx.putImageData(img,0,0);
+  // craters
+  for(let i=0;i<craterCount;i++){
+    const x = rand()*w, y = rand()*h, r = 4 + rand()*rand()*34;
+    const g = ctx.createRadialGradient(x-r*0.3,y-r*0.3,r*0.1,x,y,r);
+    g.addColorStop(0, 'rgba(0,0,0,0.02)');
+    g.addColorStop(0.55, 'rgba(0,0,0,0.35)');
+    g.addColorStop(0.8, 'rgba(255,255,255,0.06)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+// Banded gas giant (Jupiter, Saturn, Uranus, Neptune)
+function bandedTexture(seed, palette, turbulence=0.5){
+  const rand = seededRandom(seed);
+  const w=1024,h=512;
+  const c = makeCanvas(w,h); const ctx = c.getContext('2d');
+  const nBig = valueNoise(w,h,140,rand);
+  const nSm = valueNoise(w,h,22,rand);
+  const bands = 14 + Math.floor(rand()*6);
+  const img = ctx.createImageData(w,h);
+  for(let y=0;y<h;y++){
+    const bandT = (Math.sin((y/h)*Math.PI*bands*0.5)+1)/2;
+    const paletteIdx = bandT*(palette.length-1);
+    const pi0 = Math.floor(paletteIdx), pi1=Math.min(palette.length-1,pi0+1);
+    const localT = paletteIdx-pi0;
+    for(let x=0;x<w;x++){
+      const warp = (nBig(x,y)-0.5)*turbulence*40;
+      const yy = Math.max(0,Math.min(h-1, y+warp));
+      const bt2 = (Math.sin((yy/h)*Math.PI*bands*0.5)+1)/2;
+      const pIdx = bt2*(palette.length-1);
+      const p0 = Math.floor(pIdx), p1 = Math.min(palette.length-1,p0+1);
+      let col = lerpColor(palette[p0], palette[p1], pIdx-p0);
+      const speck = (nSm(x,y)-0.5)*26;
+      col = [col[0]+speck, col[1]+speck, col[2]+speck];
+      const i=(y*w+x)*4;
+      img.data[i]=Math.max(0,Math.min(255,col[0]));
+      img.data[i+1]=Math.max(0,Math.min(255,col[1]));
+      img.data[i+2]=Math.max(0,Math.min(255,col[2]));
+      img.data[i+3]=255;
+    }
+  }
+  ctx.putImageData(img,0,0);
+  return new THREE.CanvasTexture(c);
+}
+
+// Terrestrial with landmasses (Earth, Mars, Venus)
+function terrestrialTexture(seed, ocean, land, land2, cloudColor, opts={}){
+  const rand = seededRandom(seed);
+  const w=1024,h=512;
+  const c = makeCanvas(w,h); const ctx = c.getContext('2d');
+  const nCont = valueNoise(w,h,110,rand);
+  const nDetail = valueNoise(w,h,26,rand);
+  const nPolar = valueNoise(w,h,50,rand);
+  const img = ctx.createImageData(w,h);
+  const landThreshold = opts.landThreshold ?? 0.52;
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let t = nCont(x,y)*0.75 + nDetail(x,y)*0.25;
+      const latitude = Math.abs(y/h - 0.5)*2; // 0 eq -> 1 pole
+      let col;
+      if (opts.noOcean) {
+        col = lerpColor(land, land2, t);
+        if (nDetail(x,y) > 0.75) col = lerpColor(col, [20,14,10], (nDetail(x,y)-0.75)*2);
+      } else if (t > landThreshold) {
+        const lt = (t-landThreshold)/(1-landThreshold);
+        col = lerpColor(land, land2, lt*0.7 + nDetail(x,y)*0.3);
+      } else {
+        const ot = t/landThreshold;
+        col = lerpColor([ocean[0]*0.55,ocean[1]*0.55,ocean[2]*0.7], ocean, ot);
+      }
+      if (opts.polarCaps && latitude > 0.82){
+        const capT = Math.min(1,(latitude-0.82)/0.14) * (0.6+nPolar(x,y)*0.4);
+        col = lerpColor(col, [246,248,252], capT);
+      }
+      const i=(y*w+x)*4;
+      img.data[i]=col[0]; img.data[i+1]=col[1]; img.data[i+2]=col[2]; img.data[i+3]=255;
+    }
+  }
+  ctx.putImageData(img,0,0);
+  return new THREE.CanvasTexture(c);
+}
+
+function cloudTexture(seed){
+  const rand = seededRandom(seed);
+  const w=1024,h=512;
+  const c = makeCanvas(w,h); const ctx = c.getContext('2d');
+  const n1 = valueNoise(w,h,90,rand);
+  const n2 = valueNoise(w,h,30,rand);
+  const img = ctx.createImageData(w,h);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let t = n1(x,y)*0.65 + n2(x,y)*0.35;
+      t = Math.pow(t, 2.2);
+      const a = Math.max(0, (t-0.42))*3.2*255;
+      const i=(y*w+x)*4;
+      img.data[i]=255; img.data[i+1]=255; img.data[i+2]=255; img.data[i+3]=Math.min(255,a);
+    }
+  }
+  ctx.putImageData(img,0,0);
+  return new THREE.CanvasTexture(c);
+}
+
+function ringTexture(seed, base){
+  const rand = seededRandom(seed);
+  const w=512,h=64;
+  const c = makeCanvas(w,h); const ctx = c.getContext('2d');
+  for(let x=0;x<w;x++){
+    const t = x/w;
+    let alpha = 0.35 + Math.abs(Math.sin(t*80+rand()*0))*0.15;
+    const gapNoise = Math.sin(t*40)*Math.sin(t*13)*Math.sin(t*71);
+    if (gapNoise > 0.55) alpha *= 0.15;
+    const shade = 0.7 + rand()*0.3;
+    ctx.fillStyle = `rgba(${base[0]*shade|0},${base[1]*shade|0},${base[2]*shade|0},${alpha})`;
+    ctx.fillRect(x,0,1,h);
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+function sunTexture(seed){
+  const rand = seededRandom(seed);
+  const w=1024,h=512;
+  const c = makeCanvas(w,h); const ctx = c.getContext('2d');
+  const n1 = valueNoise(w,h,50,rand);
+  const n2 = valueNoise(w,h,14,rand);
+  const img = ctx.createImageData(w,h);
+  const hot=[255,244,180], mid=[255,178,64], cool=[255,110,40];
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const t = n1(x,y)*0.6+n2(x,y)*0.4;
+      let col = t>0.55 ? lerpColor(mid,hot,(t-0.55)/0.45) : lerpColor(cool,mid,t/0.55);
+      const i=(y*w+x)*4;
+      img.data[i]=col[0]; img.data[i+1]=col[1]; img.data[i+2]=col[2]; img.data[i+3]=255;
+    }
+  }
+  ctx.putImageData(img,0,0);
+  return new THREE.CanvasTexture(c);
+}
+
+function glowSprite(colorInner, colorOuter, size=256){
+  const c = makeCanvas(size,size); const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+  g.addColorStop(0, colorInner);
+  g.addColorStop(0.4, colorOuter);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,size,size);
+  return new THREE.CanvasTexture(c);
+}
+
+/* =========================================================
+   SCENE SETUP
+========================================================= */
+
+const container = document.getElementById('app');
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 8000);
+camera.position.set(0, 140, 340);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, logarithmicDepthBuffer:true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+container.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 8;
+controls.maxDistance = 2600;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.5;
+
+// Starfield (foreground parallax layer, sits in front of the sky-dome)
+function buildStars(){
+  const group = new THREE.Group();
+  const geo = new THREE.BufferGeometry();
+  const COUNT = 6000;
+  const positions = new Float32Array(COUNT*3);
+  const colors = new Float32Array(COUNT*3);
+  const sizes = new Float32Array(COUNT);
+  const rand = seededRandom(42);
+  for(let i=0;i<COUNT;i++){
+    const r = 1200 + rand()*1900;
+    const theta = rand()*Math.PI*2;
+    const phi = Math.acos(2*rand()-1);
+    positions[i*3] = r*Math.sin(phi)*Math.cos(theta);
+    positions[i*3+1] = r*Math.cos(phi);
+    positions[i*3+2] = r*Math.sin(phi)*Math.sin(theta);
+    const tint = 0.75 + rand()*0.25;
+    const warm = rand() > 0.85;
+    colors[i*3] = warm ? tint : tint*0.85+0.15;
+    colors[i*3+1] = tint*0.9+0.1;
+    colors[i*3+2] = warm ? tint*0.75 : tint;
+    sizes[i] = rand()>0.94 ? 2.6+rand()*1.8 : 1.0+rand()*1.2;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors,3));
+  const mat = new THREE.PointsMaterial({ size:1.8, vertexColors:true, transparent:true, opacity:0.95, sizeAttenuation:true });
+  group.add(new THREE.Points(geo, mat));
+  return group;
+}
+scene.add(buildStars());
+
+// subtle nebula haze via large soft sprites
+function buildNebula(){
+  const group = new THREE.Group();
+  const specs = [
+    { color:'rgba(100,70,170,0.14)', pos:[-900,200,-1400], size:2400 },
+    { color:'rgba(50,110,170,0.14)', pos:[1100,-150,-1600], size:2800 },
+    { color:'rgba(150,70,110,0.11)', pos:[400,600,-1800], size:2200 },
+    { color:'rgba(80,190,160,0.09)', pos:[-1300,-400,-1000], size:1900 },
+  ];
+  specs.forEach(s=>{
+    const tex = glowSprite(s.color, 'rgba(0,0,0,0)', 512);
+    const mat = new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending });
+    const sprite = new THREE.Sprite(mat);
+    sprite.position.set(...s.pos);
+    sprite.scale.set(s.size, s.size, 1);
+    group.add(sprite);
+  });
+  return group;
+}
+scene.add(buildNebula());
+
+// Rich sky-dome: Milky Way band, dense speckled stars, nebula smudges, distant galaxies
+function buildSkyDome(){
+  const w=2048,h=1024;
+  const c = makeCanvas(w,h); const ctx = c.getContext('2d');
+  const rand = seededRandom(99);
+
+  ctx.fillStyle = '#04050d'; ctx.fillRect(0,0,w,h);
+
+  // subtle top/bottom tint
+  const vgrad = ctx.createLinearGradient(0,0,0,h);
+  vgrad.addColorStop(0,'rgba(18,14,42,0.45)');
+  vgrad.addColorStop(0.5,'rgba(5,6,15,0)');
+  vgrad.addColorStop(1,'rgba(22,10,28,0.4)');
+  ctx.fillStyle = vgrad; ctx.fillRect(0,0,w,h);
+
+  // Milky Way band — soft diagonal glow with denser star speckle inside it
+  ctx.save();
+  ctx.translate(w*0.52, h*0.4);
+  ctx.rotate(-0.38);
+  const bandGrad = ctx.createLinearGradient(0,-170,0,170);
+  bandGrad.addColorStop(0,   'rgba(160,175,255,0)');
+  bandGrad.addColorStop(0.5, 'rgba(190,195,255,0.16)');
+  bandGrad.addColorStop(1,   'rgba(160,175,255,0)');
+  ctx.fillStyle = bandGrad;
+  ctx.fillRect(-w, -170, w*2, 340);
+  for(let i=0;i<3500;i++){
+    const bx = (rand()-0.5)*w*1.9;
+    const by = (rand()-0.5)*300*(0.3+Math.pow(rand(),1.5));
+    const s = 0.5+rand()*1.3;
+    ctx.fillStyle = `rgba(255,255,255,${0.25+rand()*0.55})`;
+    ctx.fillRect(bx,by,s,s);
+  }
+  ctx.restore();
+
+  // general speckled starfield across whole dome
+  for(let i=0;i<9000;i++){
+    const x = rand()*w, y = rand()*h;
+    const roll = rand();
+    const size = roll<0.92 ? 0.5+rand()*0.7 : 0.9+rand()*1.7;
+    const bright = 0.25+rand()*0.65;
+    const warm = rand()>0.82;
+    ctx.fillStyle = warm
+      ? `rgba(255,${220+rand()*30|0},${190+rand()*40|0},${bright})`
+      : `rgba(${220+rand()*35|0},${230+rand()*25|0},255,${bright})`;
+    ctx.fillRect(x,y,size,size);
+  }
+
+  // faint colorful nebula smudges scattered around
+  const nebColors = ['110,80,200','60,130,210','210,90,130','70,190,170','200,140,70'];
+  for(let i=0;i<7;i++){
+    const x = rand()*w, y = rand()*h*0.92;
+    const r = 90+rand()*180;
+    const col = nebColors[i%nebColors.length];
+    const g = ctx.createRadialGradient(x,y,0,x,y,r);
+    g.addColorStop(0, `rgba(${col},0.11)`);
+    g.addColorStop(1, `rgba(${col},0)`);
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+
+  // distant background galaxies — small elliptical glows with a bright core
+  for(let i=0;i<6;i++){
+    const x = rand()*w, y = rand()*h;
+    const rw = 16+rand()*30, rh = rw*(0.35+rand()*0.25);
+    ctx.save();
+    ctx.translate(x,y); ctx.rotate(rand()*Math.PI);
+    const g = ctx.createRadialGradient(0,0,0,0,0,rw);
+    g.addColorStop(0,'rgba(255,250,240,0.55)');
+    g.addColorStop(0.4,'rgba(230,225,255,0.18)');
+    g.addColorStop(1,'rgba(230,225,255,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.ellipse(0,0,rw,rh,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,250,0.8)';
+    ctx.beginPath(); ctx.arc(0,0,rw*0.12,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  const geo = new THREE.SphereGeometry(3900, 48, 32);
+  const mat = new THREE.MeshBasicMaterial({ map:tex, side:THREE.BackSide, depthWrite:false });
+  return new THREE.Mesh(geo, mat);
+}
+scene.add(buildSkyDome());
+
+/* =========================================================
+   SUN
+========================================================= */
+
+const sunGroup = new THREE.Group();
+scene.add(sunGroup);
+
+const sunGeo = new THREE.SphereGeometry(18, 64, 64);
+const sunMat = new THREE.MeshBasicMaterial({ map: sunTexture(7) });
+const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+sunGroup.add(sunMesh);
+
+const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowSprite('rgba(255,220,150,0.9)', 'rgba(255,140,50,0.25)', 512),
+  transparent:true, depthWrite:false
+}));
+sunGlow.scale.set(120,120,1);
+sunGroup.add(sunGlow);
+
+const sunLight = new THREE.PointLight(0xfff2d8, 3.4, 0, 0);
+sunLight.decay = 0.15;
+scene.add(sunLight);
+scene.add(new THREE.AmbientLight(0x30345a, 0.55));
+
+/* =========================================================
+   PLANETS DATA
+========================================================= */
+
+const AU = 26; // visual distance scale
+
+const SUN = {
+  key:'sun', name:'The Sun', kind:'Star', tagline:'A middle-aged star, 4.6 billion years into a ten billion year life.',
+  color:'#f5b25a',
+  stats:[['Diameter','1,391,000 km'],['Mass','333,000 × Earth'],['Surface temp','5,500°C'],['Core temp','~15,000,000°C'],['Age','~4.6 billion years'],['Composition','~73% hydrogen, 25% helium']],
+  fact:'The Sun accounts for about 99.8% of the total mass of the entire solar system, and light from its core takes thousands of years to reach the surface.'
+};
+
+const PLANETS = [
+  {
+    key:'mercury', name:'Mercury', kind:'Planet', tagline:'Scorched and silent, closest to the flame.',
+    radius:1.6, distance:AU*0.9, speed:0.048, rotSpeed:0.001, tilt:0.001, color:'#b9a68e',
+    texture: () => craterTexture(11, [120,108,94], [70,60,52], [176,164,148], 200),
+    stats:[['Diameter','4,879 km'],['Distance from Sun','57.9M km'],['Orbital period','88 days'],['Day length','58.6 Earth days'],['Moons','0'],['Surface temp','-173°C to 427°C']],
+    fact:'Mercury has almost no atmosphere to trap heat, so its surface swings from blistering heat by day to deep freeze by night.'
+  },
+  {
+    key:'venus', name:'Venus', kind:'Planet', tagline:'Earth\u2019s twin, wrapped in a furnace of cloud.',
+    radius:2.4, distance:AU*1.4, speed:0.035, rotSpeed:-0.0004, tilt:0.05, color:'#e0c088',
+    texture: () => terrestrialTexture(22, [214,178,110], [232,196,132], [198,150,92], null, { noOcean:true }),
+    stats:[['Diameter','12,104 km'],['Distance from Sun','108.2M km'],['Orbital period','225 days'],['Day length','243 Earth days'],['Moons','0'],['Surface temp','~465°C']],
+    fact:'Venus rotates backwards compared to most planets, and its thick CO₂ atmosphere makes it the hottest planet in the solar system.'
+  },
+  {
+    key:'earth', name:'Earth', kind:'Planet', tagline:'The only known address with a view.',
+    radius:2.55, distance:AU*2.0, speed:0.028, rotSpeed:0.02, tilt:0.41, color:'#4a90c4',
+    texture: () => terrestrialTexture(3, [24,68,120], [58,110,60], [140,120,70], null, { polarCaps:true }),
+    hasClouds:true, hasMoon:true,
+    stats:[['Diameter','12,742 km'],['Distance from Sun','149.6M km'],['Orbital period','365.25 days'],['Day length','24 hours'],['Moons','1'],['Surface temp','-88°C to 58°C']],
+    fact:'About 71% of Earth\u2019s surface is water, and its magnetic field shields the planet from most solar radiation.'
+  },
+  {
+    key:'mars', name:'Mars', kind:'Planet', tagline:'The rust-red world humans dream of walking.',
+    radius:1.9, distance:AU*2.6, speed:0.023, rotSpeed:0.0185, tilt:0.44, color:'#c1542f',
+    texture: () => terrestrialTexture(19, [120,54,30], [193,90,45], [96,52,34], null, { noOcean:true, landThreshold:0.4 }),
+    stats:[['Diameter','6,779 km'],['Distance from Sun','227.9M km'],['Orbital period','687 days'],['Day length','24.6 hours'],['Moons','2'],['Surface temp','-153°C to 20°C']],
+    fact:'Mars is home to Olympus Mons, the tallest volcano in the solar system, standing nearly three times the height of Everest.'
+  },
+  {
+    key:'jupiter', name:'Jupiter', kind:'Gas Giant', tagline:'A storm-striped giant, king of the planets.',
+    radius:7.2, distance:AU*3.6, speed:0.013, rotSpeed:0.045, tilt:0.055, color:'#c9a06a',
+    texture: () => bandedTexture(5, [[176,140,102],[214,186,150],[150,110,80],[224,202,168],[132,96,70]], 0.6),
+    stats:[['Diameter','139,820 km'],['Distance from Sun','778.5M km'],['Orbital period','11.9 years'],['Day length','9.9 hours'],['Moons','95'],['Notable','Great Red Spot storm']],
+    fact:'Jupiter\u2019s Great Red Spot is a storm wider than Earth that has been raging for at least 350 years.'
+  },
+  {
+    key:'saturn', name:'Saturn', kind:'Gas Giant', tagline:'Crowned with ice and rock in perfect rings.',
+    radius:6.2, distance:AU*4.6, speed:0.0097, rotSpeed:0.042, tilt:0.47, color:'#d9c48a',
+    texture: () => bandedTexture(9, [[210,190,150],[232,214,176],[196,172,132],[224,206,168]], 0.4),
+    hasRings:true,
+    stats:[['Diameter','116,460 km'],['Distance from Sun','1.43B km'],['Orbital period','29.4 years'],['Day length','10.7 hours'],['Moons','146'],['Notable','Dramatic ring system']],
+    fact:'Saturn\u2019s rings are made mostly of ice and rock fragments, some as small as dust and others as large as a house.'
+  },
+  {
+    key:'uranus', name:'Uranus', kind:'Ice Giant', tagline:'An icy world tipped on its side.',
+    radius:3.6, distance:AU*5.4, speed:0.0068, rotSpeed:-0.03, tilt:1.4, color:'#9fd8dc',
+    texture: () => bandedTexture(31, [[150,214,216],[176,228,228],[136,198,202]], 0.15),
+    stats:[['Diameter','50,724 km'],['Distance from Sun','2.87B km'],['Orbital period','84 years'],['Day length','17.2 hours'],['Moons','28'],['Surface temp','-224°C avg']],
+    fact:'Uranus spins almost on its side, likely the result of an ancient collision, giving it the most extreme seasons of any planet.'
+  },
+  {
+    key:'neptune', name:'Neptune', kind:'Ice Giant', tagline:'A deep blue world lashed by supersonic winds.',
+    radius:3.5, distance:AU*6.1, speed:0.0054, rotSpeed:0.032, tilt:0.49, color:'#3d5fe0',
+    texture: () => bandedTexture(44, [[46,72,190],[70,100,214],[36,58,160]], 0.35),
+    stats:[['Diameter','49,244 km'],['Distance from Sun','4.5B km'],['Orbital period','165 years'],['Day length','16.1 hours'],['Moons','16'],['Notable','Fastest winds in the solar system']],
+    fact:'Neptune\u2019s winds can reach 2,100 km/h, the fastest recorded in the solar system, despite the planet\u2019s distance from the Sun.'
+  },
+];
+
+const planetGroups = [];
+const clickable = [];
+
+function buildOrbitLine(radius){
+  const points = [];
+  const segments = 180;
+  for(let i=0;i<=segments;i++){
+    const a = (i/segments)*Math.PI*2;
+    points.push(new THREE.Vector3(Math.cos(a)*radius,0,Math.sin(a)*radius));
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(points);
+  const mat = new THREE.LineBasicMaterial({ color:0x5a6088, transparent:true, opacity:0.35 });
+  return new THREE.LineLoop(geo, mat);
+}
+
+PLANETS.forEach(p=>{
+  const orbitAngle = Math.random()*Math.PI*2;
+  const pivot = new THREE.Group();
+  pivot.rotation.y = orbitAngle;
+  scene.add(pivot);
+  scene.add(buildOrbitLine(p.distance));
+
+  const planetPivot = new THREE.Group();
+  planetPivot.position.set(p.distance, 0, 0);
+  pivot.add(planetPivot);
+
+  const tiltGroup = new THREE.Group();
+  tiltGroup.rotation.z = p.tilt;
+  planetPivot.add(tiltGroup);
+
+  const geo = new THREE.SphereGeometry(p.radius, 48, 48);
+  const mat = new THREE.MeshStandardMaterial({ map:p.texture(), roughness:0.92, metalness:0.02 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.planet = p;
+  tiltGroup.add(mesh);
+  clickable.push(mesh);
+
+  if (p.hasClouds){
+    const cloudGeo = new THREE.SphereGeometry(p.radius*1.015, 48, 48);
+    const cloudMat = new THREE.MeshStandardMaterial({ map: cloudTexture(77), transparent:true, opacity:0.55, depthWrite:false });
+    const clouds = new THREE.Mesh(cloudGeo, cloudMat);
+    tiltGroup.add(clouds);
+    p._clouds = clouds;
+  }
+
+  if (p.hasRings){
+    const ringGeo = new THREE.RingGeometry(p.radius*1.5, p.radius*2.6, 128);
+    // fix UV mapping for radial gradient ring
+    const pos = ringGeo.attributes.position;
+    const uv = ringGeo.attributes.uv;
+    const v3 = new THREE.Vector3();
+    for(let i=0;i<pos.count;i++){
+      v3.fromBufferAttribute(pos, i);
+      const d = (v3.length()-p.radius*1.5)/(p.radius*2.6-p.radius*1.5);
+      uv.setXY(i, d, 0.5);
+    }
+    const ringMat = new THREE.MeshBasicMaterial({ map: ringTexture(3, [214,196,158]), side:THREE.DoubleSide, transparent:true });
+    const rings = new THREE.Mesh(ringGeo, ringMat);
+    rings.rotation.x = Math.PI/2.05;
+    tiltGroup.add(rings);
+  }
+
+  if (p.hasMoon){
+    const moonPivot = new THREE.Group();
+    tiltGroup.add(moonPivot);
+    const moonGeo = new THREE.SphereGeometry(p.radius*0.27, 24, 24);
+    const moonMat = new THREE.MeshStandardMaterial({ map: craterTexture(88, [150,148,150],[90,88,92],[190,188,190],90), roughness:1 });
+    const moon = new THREE.Mesh(moonGeo, moonMat);
+    moon.position.set(p.radius*3.2, 0, 0);
+    moonPivot.add(moon);
+    p._moonPivot = moonPivot;
+  }
+
+  planetGroups.push({ data:p, pivot, mesh, tiltGroup });
+});
+
+// Asteroid belt between Mars and Jupiter
+function buildAsteroidBelt(){
+  const group = new THREE.Group();
+  const rand = seededRandom(123);
+  const geo = new THREE.IcosahedronGeometry(0.28, 0);
+  const mat = new THREE.MeshStandardMaterial({ color:0x8a8378, roughness:1 });
+  const mesh = new THREE.InstancedMesh(geo, mat, 900);
+  const dummy = new THREE.Object3D();
+  const innerR = AU*3.0, outerR = AU*3.35;
+  for(let i=0;i<900;i++){
+    const r = innerR + rand()*(outerR-innerR);
+    const a = rand()*Math.PI*2;
+    const y = (rand()-0.5)*4;
+    dummy.position.set(Math.cos(a)*r, y, Math.sin(a)*r);
+    dummy.rotation.set(rand()*Math.PI, rand()*Math.PI, rand()*Math.PI);
+    const s = 0.4 + rand()*1.6;
+    dummy.scale.set(s,s,s);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+  }
+  group.add(mesh);
+  return group;
+}
+scene.add(buildAsteroidBelt());
+
+/* =========================================================
+   SATELLITE (procedural, orbits Earth)
+========================================================= */
+function buildSatellite(earthEntry){
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color:0xd8d8dc, roughness:0.4, metalness:0.6 });
+  const panelMat = new THREE.MeshStandardMaterial({ color:0x1a3a7a, roughness:0.3, metalness:0.2, emissive:0x0a1a40, emissiveIntensity:0.3 });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.3,0.3), bodyMat);
+  group.add(body);
+  [-1,1].forEach(side=>{
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(1.1,0.02,0.4), panelMat);
+    panel.position.x = side*0.85;
+    group.add(panel);
+  });
+  const dish = new THREE.Mesh(new THREE.ConeGeometry(0.14,0.1,16), bodyMat);
+  dish.rotation.z = Math.PI/2;
+  dish.position.set(0,0.22,0);
+  group.add(dish);
+  group.scale.setScalar(1.4);
+
+  const orbitPivot = new THREE.Group();
+  orbitPivot.rotation.x = 0.5;
+  earthEntry.tiltGroup.add(orbitPivot);
+  group.position.set(earthEntry.data.radius*4.4, 0, 0);
+  orbitPivot.add(group);
+  return orbitPivot;
+}
+const earthEntryForSat = planetGroups.find(g=>g.data.key==='earth');
+const satellitePivot = earthEntryForSat ? buildSatellite(earthEntryForSat) : null;
+
+/* =========================================================
+   LANDING HERO CAMERA — starts close to a random planet
+========================================================= */
+let landingActive = true;
+const landingFocusEntry = planetGroups[Math.floor(Math.random()*planetGroups.length)];
+(function initLandingCamera(){
+  const wp = new THREE.Vector3();
+  landingFocusEntry.mesh.getWorldPosition(wp);
+  const dist = Math.max(landingFocusEntry.data.radius*10, 24);
+  const dir = new THREE.Vector3(0.55,0.28,0.8).normalize();
+  camera.position.copy(wp).add(dir.multiplyScalar(dist));
+  controls.target.copy(wp);
+})();
+
+/* =========================================================
+   METEOR STREAKS
+========================================================= */
+const meteors = [];
+function spawnMeteor(){
+  const start = new THREE.Vector3(
+    (Math.random()-0.5)*1600,
+    300 + Math.random()*400,
+    -800 - Math.random()*600
+  );
+  const dir = new THREE.Vector3(-1, -0.6, 0.4).normalize();
+  const length = 22 + Math.random()*18;
+  const geo = new THREE.BufferGeometry().setFromPoints([
+    start, start.clone().add(dir.clone().multiplyScalar(-length))
+  ]);
+  const mat = new THREE.LineBasicMaterial({ color:0xfff2d0, transparent:true, opacity:0.9 });
+  const line = new THREE.Line(geo, mat);
+  scene.add(line);
+  meteors.push({ line, pos:start, dir, life:0, maxLife: 1.4+Math.random()*0.6 });
+}
+let meteorTimer = 2 + Math.random()*4;
+
+/* =========================================================
+   INTERACTION: raycasting, hover, click, camera fly-to
+========================================================= */
+
+const raycaster = new THREE.Raycaster();
+const pointerNDC = new THREE.Vector2();
+const crosshair = document.getElementById('crosshair-name');
+let hovered = null;
+
+function onPointerMove(e){
+  const x = e.clientX ?? (e.touches && e.touches[0].clientX);
+  const y = e.clientY ?? (e.touches && e.touches[0].clientY);
+  if (x==null) return;
+  pointerNDC.x = (x/window.innerWidth)*2-1;
+  pointerNDC.y = -(y/window.innerHeight)*2+1;
+  raycaster.setFromCamera(pointerNDC, camera);
+  const hits = raycaster.intersectObjects(clickable);
+  if (hits.length){
+    hovered = hits[0].object;
+    crosshair.style.opacity = 1;
+    crosshair.style.left = x+'px';
+    crosshair.style.top = y+'px';
+    crosshair.textContent = hovered.userData.planet.name;
+    renderer.domElement.style.cursor = 'pointer';
+  } else {
+    hovered = null;
+    crosshair.style.opacity = 0;
+    renderer.domElement.style.cursor = 'grab';
+  }
+}
+renderer.domElement.addEventListener('pointermove', onPointerMove);
+
+let flyTarget = null; // { position: Vector3, lookAt: Vector3 }
+let flyProgress = 1;
+let flyFrom = { pos:new THREE.Vector3(), target:new THREE.Vector3() };
+
+function focusPlanet(planetGroupEntry){
+  const p = planetGroupEntry.data;
+  const worldPos = new THREE.Vector3();
+  planetGroupEntry.mesh.getWorldPosition(worldPos);
+  const dist = Math.max(p.radius*7, 14);
+  const dir = new THREE.Vector3(0.55,0.35,0.75).normalize();
+  const camPos = worldPos.clone().add(dir.multiplyScalar(dist));
+
+  flyFrom.pos.copy(camera.position);
+  flyFrom.target.copy(controls.target);
+  flyTarget = { position: camPos, lookAt: worldPos.clone(), entry: planetGroupEntry };
+  flyProgress = 0;
+
+  openPanel(p);
+  setActiveNav(p.key);
+}
+
+function focusSun(){
+  flyFrom.pos.copy(camera.position);
+  flyFrom.target.copy(controls.target);
+  flyTarget = { position: new THREE.Vector3(0,90,220), lookAt:new THREE.Vector3(0,0,0), entry:null };
+  flyProgress = 0;
+  openPanel(SUN);
+  setActiveNav('sun');
+}
+
+const ALL_BODIES = [SUN, ...PLANETS];
+
+function goToBody(key){
+  if (key==='sun'){ focusSun(); return; }
+  const entry = planetGroups.find(g=>g.data.key===key);
+  if (entry) focusPlanet(entry);
+}
+
+function selectAtPoint(x, y){
+  pointerNDC.x = (x/window.innerWidth)*2-1;
+  pointerNDC.y = -(y/window.innerHeight)*2+1;
+  raycaster.setFromCamera(pointerNDC, camera);
+  const hits = raycaster.intersectObjects(clickable);
+  if (hits.length){
+    const entry = planetGroups.find(g=>g.mesh===hits[0].object);
+    if (entry) focusPlanet(entry);
+  }
+}
+
+// Works for both mouse click and mobile tap: use the event's own
+// coordinates rather than relying on a prior pointermove/hover state.
+renderer.domElement.addEventListener('click', (e)=>{
+  selectAtPoint(e.clientX, e.clientY);
+});
+
+/* =========================================================
+   UI: nav rail + info panel
+========================================================= */
+
+const rail = document.getElementById('rail');
+const sunBtn = document.createElement('button');
+sunBtn.className = 'nav-btn';
+sunBtn.textContent = 'Sun';
+sunBtn.dataset.key = 'sun';
+sunBtn.addEventListener('click', focusSun);
+rail.appendChild(sunBtn);
+
+PLANETS.forEach(p=>{
+  const btn = document.createElement('button');
+  btn.className = 'nav-btn';
+  btn.textContent = p.name;
+  btn.dataset.key = p.key;
+  btn.addEventListener('click', ()=>{
+    const entry = planetGroups.find(g=>g.data.key===p.key);
+    focusPlanet(entry);
+  });
+  rail.appendChild(btn);
+});
+
+function setActiveNav(key){
+  rail.querySelectorAll('.nav-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.key===key);
+  });
+}
+
+const panel = document.getElementById('panel');
+const pKind = document.getElementById('pKind');
+const pName = document.getElementById('pName');
+const pTagline = document.getElementById('pTagline');
+const pSwatch = document.getElementById('pSwatch');
+const pStats = document.getElementById('pStats');
+const pFact = document.getElementById('pFact');
+
+function openPanel(p){
+  pKind.textContent = p.kind;
+  pName.textContent = p.name;
+  pTagline.textContent = p.tagline;
+  pSwatch.style.background = `linear-gradient(90deg, ${p.color}, transparent)`;
+  pStats.innerHTML = '';
+  p.stats.forEach(([label,value])=>{
+    const row = document.createElement('div');
+    row.className = 'stat-row';
+    row.innerHTML = `<span class="label">${label}</span><span class="value">${value}</span>`;
+    pStats.appendChild(row);
+  });
+  pFact.textContent = p.fact;
+  panel.classList.add('open');
+}
+document.getElementById('panelClose').addEventListener('click', ()=>{
+  panel.classList.remove('open');
+  setActiveNav(null);
+});
+
+/* =========================================================
+   SEARCH
+========================================================= */
+
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+let searchActiveIdx = -1;
+
+function renderSearchResults(query){
+  const q = query.trim().toLowerCase();
+  searchResults.innerHTML = '';
+  searchActiveIdx = -1;
+  if (!q){ searchResults.classList.remove('show'); return; }
+  const matches = ALL_BODIES.filter(b => b.name.toLowerCase().includes(q));
+  if (!matches.length){
+    searchResults.innerHTML = `<div class="empty">No world matches "${query}"</div>`;
+    searchResults.classList.add('show');
+    return;
+  }
+  matches.forEach(b=>{
+    const row = document.createElement('div');
+    row.className = 'result';
+    row.innerHTML = `<span class="dot" style="background:${b.color}"></span>${b.name}`;
+    row.addEventListener('click', ()=>{
+      goToBody(b.key);
+      searchInput.value = '';
+      searchResults.classList.remove('show');
+    });
+    searchResults.appendChild(row);
+  });
+  searchResults.classList.add('show');
+}
+
+searchInput.addEventListener('input', (e)=> renderSearchResults(e.target.value));
+searchInput.addEventListener('focus', (e)=>{ if (e.target.value) renderSearchResults(e.target.value); });
+searchInput.addEventListener('keydown', (e)=>{
+  const items = [...searchResults.querySelectorAll('.result')];
+  if (e.key === 'ArrowDown'){
+    e.preventDefault();
+    searchActiveIdx = Math.min(items.length-1, searchActiveIdx+1);
+    items.forEach((it,i)=>it.classList.toggle('active', i===searchActiveIdx));
+  } else if (e.key === 'ArrowUp'){
+    e.preventDefault();
+    searchActiveIdx = Math.max(0, searchActiveIdx-1);
+    items.forEach((it,i)=>it.classList.toggle('active', i===searchActiveIdx));
+  } else if (e.key === 'Enter'){
+    if (items.length){
+      const idx = searchActiveIdx>=0 ? searchActiveIdx : 0;
+      items[idx].click();
+    }
+  } else if (e.key === 'Escape'){
+    searchResults.classList.remove('show');
+    searchInput.blur();
+  }
+});
+document.addEventListener('click', (e)=>{
+  if (!document.getElementById('searchBox').contains(e.target)){
+    searchResults.classList.remove('show');
+  }
+});
+
+/* =========================================================
+   COMPARE
+========================================================= */
+
+const compareModal = document.getElementById('compareModal');
+const compareA = document.getElementById('compareA');
+const compareB = document.getElementById('compareB');
+const compareTable = document.getElementById('compareTable');
+
+PLANETS.forEach((p,i)=>{
+  const optA = document.createElement('option'); optA.value = p.key; optA.textContent = p.name;
+  const optB = document.createElement('option'); optB.value = p.key; optB.textContent = p.name;
+  compareA.appendChild(optA);
+  compareB.appendChild(optB);
+});
+compareA.value = 'earth';
+compareB.value = 'mars';
+
+function renderCompare(){
+  const a = PLANETS.find(p=>p.key===compareA.value);
+  const b = PLANETS.find(p=>p.key===compareB.value);
+  compareTable.innerHTML = '';
+
+  const nameRow = document.createElement('div');
+  nameRow.className = 'cname-row';
+  nameRow.innerHTML = `<div class="cname left">${a.name}</div><div></div><div class="cname right">${b.name}</div>`;
+  compareTable.appendChild(nameRow);
+
+  const len = Math.max(a.stats.length, b.stats.length);
+  for(let i=0;i<len;i++){
+    const sa = a.stats[i], sb = b.stats[i];
+    const row = document.createElement('div');
+    row.className = 'crow';
+    const labelText = (sa && sb && sa[0]===sb[0]) ? sa[0] : [sa?sa[0]:'', sb?sb[0]:''].filter(Boolean).join(' / ');
+    row.innerHTML = `
+      <div class="cval left">${sa ? sa[1] : '—'}</div>
+      <div class="clabel">${labelText}</div>
+      <div class="cval right">${sb ? sb[1] : '—'}</div>
+    `;
+    compareTable.appendChild(row);
+  }
+}
+
+document.getElementById('compareOpenBtn').addEventListener('click', ()=>{
+  renderCompare();
+  compareModal.classList.add('open');
+});
+document.getElementById('compareClose').addEventListener('click', ()=>{
+  compareModal.classList.remove('open');
+});
+compareModal.addEventListener('click', (e)=>{
+  if (e.target === compareModal) compareModal.classList.remove('open');
+});
+compareA.addEventListener('change', renderCompare);
+compareB.addEventListener('change', renderCompare);
+
+/* =========================================================
+   ANIMATION LOOP
+========================================================= */
+
+let simSpeed = 1;
+let last = performance.now();
+
+function animate(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  const sdt = dt*simSpeed;
+
+  sunMesh.rotation.y += dt*0.02;
+
+  planetGroups.forEach(({data,pivot,mesh,tiltGroup})=>{
+    pivot.rotation.y += data.speed*sdt;
+    mesh.rotation.y += data.rotSpeed*30*sdt;
+    if (data._clouds) data._clouds.rotation.y += sdt*0.01;
+    if (data._moonPivot) data._moonPivot.rotation.y += sdt*0.6;
+  });
+  if (satellitePivot) satellitePivot.rotation.y += sdt*1.8;
+
+  if (landingActive){
+    const lwp = new THREE.Vector3();
+    landingFocusEntry.mesh.getWorldPosition(lwp);
+    controls.target.copy(lwp);
+  }
+
+  if (flyTarget){
+    flyProgress = Math.min(1, flyProgress + dt*0.9);
+    const e = 1-Math.pow(1-flyProgress,3);
+    camera.position.lerpVectors(flyFrom.pos, flyTarget.position, e);
+    controls.target.lerpVectors(flyFrom.target, flyTarget.lookAt, e);
+    if (flyProgress>=1){
+      flyTarget=null;
+      onFlyComplete();
+    }
+  }
+
+  // meteors
+  meteorTimer -= dt;
+  if (meteorTimer <= 0){ spawnMeteor(); meteorTimer = 3 + Math.random()*5; }
+  for(let i=meteors.length-1;i>=0;i--){
+    const m = meteors[i];
+    m.life += dt;
+    m.line.position.addScaledVector(m.dir, dt*260);
+    m.line.material.opacity = 0.9 * (1 - m.life/m.maxLife);
+    if (m.life >= m.maxLife){
+      scene.remove(m.line);
+      m.line.geometry.dispose(); m.line.material.dispose();
+      meteors.splice(i,1);
+    }
+  }
+
+  drawRadar();
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* =========================================================
+   RADAR / MINI-MAP
+========================================================= */
+const radarCanvas = document.getElementById('radarCanvas');
+const radarCtx = radarCanvas.getContext('2d');
+const RADAR_SCALE = 120 / ((AU*6.4) * 2.15);
+
+function drawRadar(){
+  const w = radarCanvas.width, h = radarCanvas.height;
+  const cx = w/2, cy = h/2;
+  radarCtx.clearRect(0,0,w,h);
+  radarCtx.fillStyle = 'rgba(255,255,255,0.02)';
+  radarCtx.fillRect(0,0,w,h);
+
+  // orbit rings
+  radarCtx.strokeStyle = 'rgba(255,255,255,0.10)';
+  radarCtx.lineWidth = 1;
+  PLANETS.forEach(p=>{
+    radarCtx.beginPath();
+    radarCtx.arc(cx, cy, p.distance*RADAR_SCALE, 0, Math.PI*2);
+    radarCtx.stroke();
+  });
+
+  // sun
+  radarCtx.fillStyle = '#e8b976';
+  radarCtx.beginPath(); radarCtx.arc(cx,cy,3,0,Math.PI*2); radarCtx.fill();
+
+  // planets
+  const wp = new THREE.Vector3();
+  planetGroups.forEach(({data,mesh})=>{
+    mesh.getWorldPosition(wp);
+    const x = cx + wp.x*RADAR_SCALE;
+    const y = cy + wp.z*RADAR_SCALE;
+    radarCtx.fillStyle = data.color;
+    radarCtx.beginPath(); radarCtx.arc(x,y,2.2,0,Math.PI*2); radarCtx.fill();
+  });
+
+  // camera position + facing
+  const camX = cx + camera.position.x*RADAR_SCALE;
+  const camY = cy + camera.position.z*RADAR_SCALE;
+  radarCtx.strokeStyle = 'rgba(111,214,208,0.9)';
+  radarCtx.fillStyle = 'rgba(111,214,208,0.9)';
+  radarCtx.beginPath(); radarCtx.arc(camX,camY,2.5,0,Math.PI*2); radarCtx.fill();
+}
+
+/* =========================================================
+   SPEED CONTROL
+========================================================= */
+const speedSlider = document.getElementById('speedSlider');
+const speedVal = document.getElementById('speedVal');
+speedSlider.addEventListener('input', ()=>{
+  simSpeed = parseFloat(speedSlider.value);
+  speedVal.textContent = simSpeed.toFixed(1)+'×';
+});
+
+/* =========================================================
+   AMBIENT SOUND (synthesized — no external audio file needed)
+========================================================= */
+let audioCtx = null, soundOn = false, soundNodes = null;
+function buildAmbient(){
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const master = audioCtx.createGain();
+  master.gain.value = 0.0;
+  master.connect(audioCtx.destination);
+
+  const osc1 = audioCtx.createOscillator();
+  osc1.type = 'sine'; osc1.frequency.value = 55;
+  const osc2 = audioCtx.createOscillator();
+  osc2.type = 'sine'; osc2.frequency.value = 82.5;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass'; filter.frequency.value = 400;
+
+  const lfo = audioCtx.createOscillator();
+  lfo.frequency.value = 0.07;
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 120;
+  lfo.connect(lfoGain); lfoGain.connect(filter.frequency);
+
+  osc1.connect(filter); osc2.connect(filter); filter.connect(master);
+  osc1.start(); osc2.start(); lfo.start();
+
+  return { master, osc1, osc2, filter, lfo };
+}
+document.getElementById('soundToggle').addEventListener('click', (e)=>{
+  if (!audioCtx) soundNodes = buildAmbient();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  soundOn = !soundOn;
+  soundNodes.master.gain.linearRampToValueAtTime(soundOn?0.06:0.0, audioCtx.currentTime+0.8);
+  e.target.classList.toggle('active', soundOn);
+});
+
+/* =========================================================
+   DID YOU KNOW — fact toasts
+========================================================= */
+const GENERAL_FACTS = [
+  'If you could drive a car straight up to space, it would take about an hour — space starts just 100 km overhead.',
+  'A day on Venus is longer than its year: it takes 243 Earth days to rotate once, but only 225 to orbit the Sun.',
+  'The footprints left by Apollo astronauts on the Moon could last millions of years — there is no wind to erode them.',
+  'Neutron stars are so dense that a teaspoon of their material would weigh about a billion tonnes.',
+  'The solar system is about 4.6 billion years old, roughly a third of the age of the universe.',
+  'Saturn could float in water — it is the only planet in the solar system less dense than water.',
+  'One million Earths could fit inside the Sun.',
+  'Space is completely silent because sound needs a medium like air or water to travel through.',
+];
+let factTimer = null;
+function showFactToast(){
+  const toast = document.getElementById('factToast');
+  const text = document.getElementById('factText');
+  text.textContent = GENERAL_FACTS[Math.floor(Math.random()*GENERAL_FACTS.length)];
+  toast.classList.add('show');
+  setTimeout(()=> toast.classList.remove('show'), 7000);
+}
+function startFactCycle(){
+  if (factTimer) return;
+  setTimeout(showFactToast, 6000);
+  factTimer = setInterval(showFactToast, 26000);
+}
+
+/* =========================================================
+   GUIDED TOUR
+========================================================= */
+let tourActive = false;
+let tourStep = 0;
+let tourTimeoutId = null;
+const TOUR_STOPS = [SUN, ...PLANETS];
+
+function onFlyComplete(){
+  if (tourActive) scheduleNextTourStop();
+}
+
+function scheduleNextTourStop(){
+  clearTimeout(tourTimeoutId);
+  tourTimeoutId = setTimeout(()=>{
+    if (!tourActive) return;
+    tourStep++;
+    if (tourStep >= TOUR_STOPS.length){ stopTour(); return; }
+    goToTourStop(tourStep);
+  }, 4200);
+}
+
+function goToTourStop(i){
+  const body = TOUR_STOPS[i];
+  document.getElementById('tourPlanetName').textContent = body.name;
+  goToBody(body.key);
+}
+
+function startTour(){
+  tourActive = true;
+  tourStep = 0;
+  document.getElementById('tourBanner').classList.add('show');
+  document.getElementById('tourBtn').classList.add('active');
+  document.getElementById('tourBtn').textContent = 'Touring…';
+  goToTourStop(0);
+}
+function stopTour(){
+  tourActive = false;
+  clearTimeout(tourTimeoutId);
+  document.getElementById('tourBanner').classList.remove('show');
+  document.getElementById('tourBtn').classList.remove('active');
+  document.getElementById('tourBtn').textContent = 'Take a guided tour';
+}
+document.getElementById('tourBtn').addEventListener('click', ()=>{
+  tourActive ? stopTour() : startTour();
+});
+document.getElementById('tourStopBtn').addEventListener('click', stopTour);
+// manual drag cancels the tour
+controls.addEventListener('start', ()=>{ if (tourActive) stopTour(); });
+
+/* =========================================================
+   ABOUT MODAL
+========================================================= */
+document.getElementById('infoBtn').addEventListener('click', ()=>{
+  document.getElementById('aboutModal').classList.add('open');
+});
+document.getElementById('aboutClose').addEventListener('click', ()=>{
+  document.getElementById('aboutModal').classList.remove('open');
+});
+document.getElementById('aboutModal').addEventListener('click', (e)=>{
+  if (e.target.id === 'aboutModal') e.currentTarget.classList.remove('open');
+});
+
+/* =========================================================
+   LOADER OUT
+========================================================= */
+window.addEventListener('load', ()=>{
+  setTimeout(()=>{
+    document.getElementById('loader').classList.add('hide');
+  }, 500);
+});
+setTimeout(()=>{ document.getElementById('loader').classList.add('hide'); }, 1800);
+
+/* ---------- Landing → Explore transition ---------- */
+document.getElementById('exploreBtn').addEventListener('click', ()=>{
+  document.getElementById('landing').classList.add('hide');
+  document.getElementById('topbar').classList.add('show');
+  document.getElementById('nav').classList.add('show');
+  document.getElementById('controlDock').classList.add('show');
+  controls.autoRotate = false;
+  landingActive = false;
+  landingFXActive = false;
+
+  // fly camera out from the close-up hero shot to the full overview
+  flyFrom.pos.copy(camera.position);
+  flyFrom.target.copy(controls.target);
+  flyTarget = { position: new THREE.Vector3(0,140,340), lookAt: new THREE.Vector3(0,0,0), entry:null };
+  flyProgress = 0;
+
+  startFactCycle();
+});
+
+/* =========================================================
+   LANDING VISUAL FX — animated nebula canvas + scramble text + ticker
+========================================================= */
+let landingFXActive = true;
+(function initLandingFX(){
+  const fx = document.getElementById('landingFX');
+  const fctx = fx.getContext('2d');
+  function resize(){
+    fx.width = window.innerWidth * Math.min(window.devicePixelRatio||1, 2);
+    fx.height = window.innerHeight * Math.min(window.devicePixelRatio||1, 2);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const blobs = Array.from({length:5}, (_,i)=>({
+    x: Math.random(), y: Math.random(),
+    r: 0.18 + Math.random()*0.22,
+    hue: [265, 205, 320, 190, 40][i%5],
+    speed: 0.02 + Math.random()*0.03,
+    phase: Math.random()*Math.PI*2
+  }));
+
+  let t = 0;
+  function drawFX(){
+    if (!landingFXActive){ return; }
+    t += 0.006;
+    const w = fx.width, h = fx.height;
+    fctx.clearRect(0,0,w,h);
+    blobs.forEach(b=>{
+      const bx = (b.x + Math.sin(t*b.speed*10 + b.phase)*0.08) * w;
+      const by = (b.y + Math.cos(t*b.speed*8 + b.phase)*0.06) * h;
+      const r = b.r * Math.max(w,h);
+      const g = fctx.createRadialGradient(bx,by,0,bx,by,r);
+      g.addColorStop(0, `hsla(${b.hue}, 70%, 60%, 0.10)`);
+      g.addColorStop(1, `hsla(${b.hue}, 70%, 50%, 0)`);
+      fctx.fillStyle = g;
+      fctx.beginPath(); fctx.arc(bx,by,r,0,Math.PI*2); fctx.fill();
+    });
+    requestAnimationFrame(drawFX);
+  }
+  drawFX();
+})();
+
+// scramble-reveal the hero heading
+(function initScramble(){
+  const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#*+-';
+  function scramble(el, delay){
+    const final = el.dataset.final;
+    let resolved = 0;
+    setTimeout(()=>{
+      const iv = setInterval(()=>{
+        let out = '';
+        for(let i=0;i<final.length;i++){
+          if (i < resolved || final[i]===' ') out += final[i];
+          else out += CHARS[Math.floor(Math.random()*CHARS.length)];
+        }
+        el.textContent = out;
+        resolved++;
+        if (resolved > final.length){ clearInterval(iv); el.textContent = final; }
+      }, 26);
+    }, delay);
+  }
+  document.querySelectorAll('#heroHeading .scramble').forEach((el,i)=>{
+    scramble(el, 380 + i*180);
+  });
+})();
+
+// live data ticker
+(function initTicker(){
+  const track = document.getElementById('tickerTrack');
+  const items = PLANETS.map(p=>{
+    const dist = p.stats.find(s=>s[0]==='Distance from Sun');
+    return `<b>${p.name.toUpperCase()}</b> ${dist?dist[1]:''} FROM SUN`;
+  });
+  const single = items.join('&nbsp;&nbsp;✦&nbsp;&nbsp;');
+  track.innerHTML = single + '&nbsp;&nbsp;✦&nbsp;&nbsp;' + single;
+})();
+
+// cursor parallax tilt on the hero text (desktop / hover-capable only)
+if (window.matchMedia && window.matchMedia('(hover:hover)').matches){
+  let tRX=0,tRY=0,cRX=0,cRY=0;
+  document.addEventListener('mousemove', (e)=>{
+    tRY = (e.clientX/window.innerWidth - 0.5) * 6;
+    tRX = -(e.clientY/window.innerHeight - 0.5) * 4;
+  });
+  (function parallaxLoop(){
+    cRX += (tRX-cRX)*0.06; cRY += (tRY-cRY)*0.06;
+    if (landingFXActive){
+      const wrap = document.querySelector('#landing .wrap');
+      if (wrap) wrap.style.transform = `rotateX(${cRX}deg) rotateY(${cRY}deg)`;
+    }
+    requestAnimationFrame(parallaxLoop);
+  })();
+}
+</script>
+</body>
+</html>
