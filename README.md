@@ -2,7 +2,7 @@
 
 **Aether** is a frontend-only, single-file 3D experience of our solar system — built with [Three.js](https://threejs.org/). Every texture, ring, glow, and starfield is generated procedurally in the browser, so there's nothing to download or configure. Just open it and fly.
 
-**🔗 Live demo:** [aether-solar-system.vercel.app](#) <!-- replace with your actual Vercel URL -->
+**🔗 Live demo:** [aether-solar-system.vercel.app](https://aether-solar-system.vercel.app) -- replace with your actual Vercel URL -->
 
 ---
 
